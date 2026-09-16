@@ -1,0 +1,35 @@
+# Local / single-server deployment. For production, point DATABASE_URL at a managed
+# PostgreSQL in a UAE region and put the app behind TLS (see docs/DEPLOYMENT.md).
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sms-dev-password}
+      POSTGRES_DB: sms
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sms -d sms"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://sms:${POSTGRES_PASSWORD:-sms-dev-password}@db:5432/sms?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET to a long random string}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
+      SEED_PASSWORD: ${SEED_PASSWORD:-Password123!}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+volumes:
+  pgdata:

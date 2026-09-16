@@ -1,0 +1,27 @@
+# Production override: use the published image instead of building locally and
+# terminate TLS with Caddy (automatic Let's Encrypt certificates).
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+services:
+  app:
+    image: ghcr.io/OWNER/REPO:latest
+    build: !reset null
+    ports: !reset []
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN to your public hostname}
+    command: caddy reverse-proxy --from ${DOMAIN} --to app:3000
+    volumes:
+      - caddy_data:/data
+
+volumes:
+  caddy_data:

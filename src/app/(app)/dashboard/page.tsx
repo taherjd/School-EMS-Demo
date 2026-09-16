@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth";
 import { attendanceSummary, collectFindings, currentYear } from "@/lib/compliance";
 import { fmtAED, fmtDate, num } from "@/lib/format";
 import { DSIB_RATING_LABEL } from "@/lib/khda";
-import { Badge, Card, PageHeader, Stat, statusTone } from "@/components/ui";
+import { Badge, Card, PageHeader, Stat } from "@/components/ui";
 
 export default async function DashboardPage() {
   const session = await requireRole("ADMIN", "REGISTRAR", "ACCOUNTANT", "TEACHER");

@@ -35,3 +35,11 @@ export function num(v: { toString(): string } | number | null | undefined): numb
   if (v === null || v === undefined) return 0;
   return typeof v === "number" ? v : Number(v.toString());
 }
+
+export function isoDaysFromNow(days: number) {
+  return toISODate(new Date(Date.now() + days * 86_400_000));
+}
+
+export function daysAgo(days: number) {
+  return new Date(Date.now() - days * 86_400_000);
+}
