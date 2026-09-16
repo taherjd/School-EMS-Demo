@@ -3,6 +3,7 @@ import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { GRADE_CATALOGUE, MANDATORY_SUBJECTS, DSIB_STANDARDS, DEFAULT_TERM_FEE_SPLIT } from "../src/lib/khda";
+import { gradeFor } from "../src/lib/grading";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
@@ -24,6 +25,26 @@ function fakeEmiratesId(seed: number) {
 }
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
+
+function visaStatus(emirati: boolean, n: number): "VERIFIED" | "EXPIRED" {
+  if (!emirati && n === 7) return "EXPIRED";
+  return "VERIFIED";
+}
+function transferCertStatus(n: number): "VERIFIED" | "RECEIVED" | "MISSING" {
+  if (n <= 2) return "VERIFIED";
+  if (n === 9) return "MISSING";
+  return "RECEIVED";
+}
+function demoPaidAmount(inv: number, total: number) {
+  if (inv % 3 === 0) return total;
+  if (inv % 3 === 1) return Math.round(total / 2);
+  return 0;
+}
+function invoiceStatus(paid: number, total: number): "PAID" | "PARTIALLY_PAID" | "ISSUED" {
+  if (paid >= total) return "PAID";
+  if (paid > 0) return "PARTIALLY_PAID";
+  return "ISSUED";
+}
 
 async function main() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
@@ -64,9 +85,7 @@ async function main() {
   });
 
   // Grades
-  const grades = await Promise.all(
-    GRADE_CATALOGUE[school.curriculum].map((g) => prisma.grade.create({ data: g })),
-  );
+  const grades = await prisma.grade.createManyAndReturn({ data: GRADE_CATALOGUE[school.curriculum] });
   const gradeByName = Object.fromEntries(grades.map((g) => [g.name, g]));
 
   // Subjects: mandatory KHDA + core
@@ -248,9 +267,9 @@ async function main() {
           create: [
             { type: "EMIRATES_ID", status: "VERIFIED", expiryDate: d(n === 4 ? "2026-10-01" : "2029-01-01") },
             { type: "PASSPORT", status: "VERIFIED", expiryDate: d("2030-06-30") },
-            { type: "VISA", status: emirati ? "VERIFIED" : n === 7 ? "EXPIRED" : "VERIFIED", expiryDate: emirati ? null : d(n === 7 ? "2026-09-30" : "2028-01-01") },
+            { type: "VISA", status: visaStatus(emirati, n), expiryDate: emirati ? null : d(n === 7 ? "2026-09-30" : "2028-01-01") },
             { type: "BIRTH_CERTIFICATE", status: "VERIFIED" },
-            { type: "TRANSFER_CERTIFICATE", status: n > 2 ? (n === 9 ? "MISSING" : "RECEIVED") : "VERIFIED" },
+            { type: "TRANSFER_CERTIFICATE", status: transferCertStatus(n) },
             { type: "IMMUNISATION_RECORD", status: n === 5 ? "MISSING" : "VERIFIED" },
             { type: "PHOTO", status: "RECEIVED" },
           ],
@@ -306,7 +325,7 @@ async function main() {
     });
     for (const s of students.filter((st) => st.sectionId === y4.id)) {
       const marks = 55 + ((s.studentNo.charCodeAt(s.studentNo.length - 1) * 7 + code.length * 11) % 40);
-      await prisma.assessmentResult.create({ data: { assessmentId: a.id, studentId: s.id, marks, gradeLabel: marks >= 85 ? "A" : marks >= 70 ? "B" : marks >= 55 ? "C" : "D" } });
+      await prisma.assessmentResult.create({ data: { assessmentId: a.id, studentId: s.id, marks, gradeLabel: gradeFor(marks) } });
     }
   }
   await prisma.assessment.create({
@@ -344,7 +363,7 @@ async function main() {
     ];
     if (s.usesSchoolTransport) items.push({ type: "TRANSPORT", description: "Term 1 school transport", amount: 2500 });
     const total = items.reduce((a, b) => a + b.amount, 0);
-    const paid = inv % 3 === 0 ? total : inv % 3 === 1 ? Math.round(total / 2) : 0;
+    const paid = demoPaidAmount(inv, total);
     const invoice = await prisma.invoice.create({
       data: {
         invoiceNo: `INV-2026-${String(inv).padStart(5, "0")}`,
@@ -352,7 +371,7 @@ async function main() {
         termId: term1.id,
         issueDate: d("2026-08-20"),
         dueDate: d("2026-09-15"),
-        status: paid >= total ? "PAID" : paid > 0 ? "PARTIALLY_PAID" : "ISSUED",
+        status: invoiceStatus(paid, total),
         items: { create: items },
       },
     });
@@ -389,8 +408,8 @@ async function main() {
 
   await prisma.auditLog.create({ data: { userId: admin.id, action: "SEED", entity: "System", details: "Demo data seeded" } });
 
-  console.log("Seeded. Demo accounts (password: %s):", DEMO_PASSWORD);
-  console.log("  admin@school.test, registrar@school.test, accounts@school.test, aisha.khan@school.test (teacher), parent@school.test");
+  console.info("Seeded demo data. Demo accounts (see README for how to sign in):");
+  console.info("  admin@school.test, registrar@school.test, accounts@school.test, aisha.khan@school.test (teacher), parent@school.test");
 }
 
 main()

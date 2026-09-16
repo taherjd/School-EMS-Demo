@@ -60,7 +60,7 @@ export async function requireRole(...roles: Role[]): Promise<Session> {
 }
 
 export function hasRole(session: Session | null, ...roles: Role[]) {
-  return !!session && roles.includes(session.role);
+  return session !== null && roles.includes(session.role);
 }
 
 export async function login(email: string, password: string): Promise<Session | null> {

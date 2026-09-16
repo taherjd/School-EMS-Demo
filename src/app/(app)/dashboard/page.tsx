@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth";
 import { attendanceSummary, collectFindings, currentYear } from "@/lib/compliance";
 import { fmtAED, fmtDate, num } from "@/lib/format";
 import { DSIB_RATING_LABEL } from "@/lib/khda";
-import { Badge, Card, PageHeader, Stat, statusTone } from "@/components/ui";
+import { Badge, Card, PageHeader, Stat, attendanceTone, safeHref, severityTone } from "@/components/ui";
 
 export default async function DashboardPage() {
   const session = await requireRole("ADMIN", "REGISTRAR", "ACCOUNTANT", "TEACHER");
@@ -22,7 +22,7 @@ export default async function DashboardPage() {
     prisma.grade.findMany({ orderBy: { order: "asc" }, include: { _count: { select: { students: { where: { status: "ENROLLED" } } } } } }),
   ]);
   const outstanding = invoices.reduce((sum, inv) => sum + inv.items.reduce((a, i) => a + num(i.amount), 0) - inv.payments.reduce((a, p) => a + num(p.amount), 0), 0);
-  const attTone = att.pct >= 96 ? "good" : att.pct >= 94 ? "default" : "warn";
+  const attTone = attendanceTone(att.pct);
 
   return (
     <>
@@ -47,10 +47,10 @@ export default async function DashboardPage() {
             <ul className="divide-y divide-gray-100">
               {findings.slice(0, 8).map((f, i) => (
                 <li key={i} className="flex items-start gap-3 py-2 text-sm">
-                  <Badge tone={f.severity === "HIGH" ? "red" : f.severity === "MEDIUM" ? "amber" : "gray"}>{f.severity}</Badge>
+                  <Badge tone={severityTone(f.severity)}>{f.severity}</Badge>
                   <div>
                     <div className="font-medium">{f.area}</div>
-                    <div className="text-gray-600">{f.href ? <Link href={f.href} className="hover:underline">{f.message}</Link> : f.message}</div>
+                    <div className="text-gray-600">{f.href ? <Link href={safeHref(f.href)} className="hover:underline">{f.message}</Link> : f.message}</div>
                   </div>
                 </li>
               ))}

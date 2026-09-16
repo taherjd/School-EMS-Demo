@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dubai School Manager
 
-## Getting Started
+An online school management system for private schools regulated by the **KHDA** (Knowledge and Human Development Authority, Dubai). It covers admissions and student records, staff and teacher licensing, academics and timetabling, attendance, assessments, fees under the KHDA fee framework, inclusion (IEPs), safeguarding logs, the Parent–School Contract, DSIB self-evaluation, and a parent portal — with an English/Arabic (RTL) interface.
 
-First, run the development server:
+- **Plan & architecture:** [docs/PLAN.md](docs/PLAN.md)
+- **KHDA compliance mapping:** [docs/KHDA-COMPLIANCE.md](docs/KHDA-COMPLIANCE.md)
+- **Deployment guide:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+
+## Stack
+
+| Layer | Choice |
+|---|---|
+| Web framework | Next.js 16 (App Router, Server Actions), React 19, TypeScript |
+| Styling | Tailwind CSS 4 |
+| Database | PostgreSQL 16 via Prisma 7 (`@prisma/adapter-pg`) |
+| Auth | Signed session cookie (JWT, `jose`) + bcrypt passwords, role-based access in `src/proxy.ts` |
+| Validation | Zod |
+| Tests | `node:test` unit tests for KHDA rules, Playwright end-to-end suite |
+| Deploy | Docker multi-stage image, docker compose (+ Caddy TLS), GitHub Actions CI/CD |
+
+## Quick start (local)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env            # set DATABASE_URL and AUTH_SECRET
+npm install                     # also runs `prisma generate`
+npx prisma migrate deploy       # create the schema
+npx prisma db seed              # demo school, users, students, fees…
+npm run dev                     # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Or with Docker (app + PostgreSQL):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+AUTH_SECRET=$(openssl rand -hex 32) SEED_DEMO_DATA=true docker compose up --build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Demo accounts (seeded, password `Password123!`)
 
-## Learn More
+| Role | Email |
+|---|---|
+| Admin | admin@school.test |
+| Registrar | registrar@school.test |
+| Accountant | accounts@school.test |
+| Teacher | aisha.khan@school.test |
+| Parent | parent@school.test |
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Command | What it does |
+|---|---|
+| `npm run dev` / `build` / `start` | Next.js dev server / production build / production server |
+| `npm run lint` / `typecheck` | ESLint / `tsc --noEmit` |
+| `npm run test:unit` | KHDA rule unit tests (age placement, fees, refunds, Emirates ID…) |
+| `npm run test:e2e` | Playwright suite against a running server (`E2E_BASE_URL`, `PW_CHROMIUM_PATH` optional) |
+| `npm run db:migrate` / `db:deploy` / `db:seed` / `db:reset` | Prisma migrations and seeding |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project layout
 
-## Deploy on Vercel
+```
+prisma/schema.prisma        data model (KHDA-flagged fields are commented)
+prisma/seed.ts              demo data
+src/lib/khda.ts             KHDA business rules and constants (single place to update)
+src/lib/compliance.ts       compliance checks that feed the dashboard and report
+src/lib/auth.ts             sessions, login, role guards
+src/proxy.ts                route protection by role
+src/app/(app)/*             modules: dashboard, students, staff, academics, attendance,
+                            assessments, fees, compliance, settings, portal
+src/app/api/*               health check, KHDA CSV export
+e2e/, tests/                Playwright and unit tests
+docker/, Dockerfile, docker-compose*.yml, .github/workflows   deployment
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Important note on KHDA rules
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+KHDA publishes and revises its requirements through circulars and frameworks (age placement chart, fee framework, Parent–School Contract, inspection framework). The rules implemented here reflect those frameworks as generally applied, and every constant lives in `src/lib/khda.ts` so it can be verified against the current KHDA circular before go-live. See [docs/KHDA-COMPLIANCE.md](docs/KHDA-COMPLIANCE.md) for the list of items to confirm with KHDA.

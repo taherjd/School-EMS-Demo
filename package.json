@@ -1,12 +1,21 @@
 {
-  "name": "test",
+  "name": "dubai-school-manager",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset --force",
+    "test:e2e": "playwright test",
+    "test:unit": "tsx --test tests/*.test.ts",
+    "build:apphosting": "prisma migrate deploy && prisma generate && next build"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
@@ -21,6 +30,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
