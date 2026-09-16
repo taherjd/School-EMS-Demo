@@ -1,0 +1,628 @@
+// Dubai school management system – data model.
+// Fields flagged "KHDA" map to data the Knowledge and Human Development Authority
+// (Dubai) expects schools to hold, report, or evidence during DSIB inspection.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Enums ─────────────────────────
+
+enum Role {
+  ADMIN
+  REGISTRAR
+  ACCOUNTANT
+  TEACHER
+  PARENT
+  STUDENT
+}
+
+enum Curriculum {
+  UK
+  US
+  IB
+  INDIAN_CBSE
+  INDIAN_ICSE
+  MOE
+  FRENCH
+  OTHER
+}
+
+enum AcademicYearStart {
+  SEPTEMBER
+  APRIL
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum StudentStatus {
+  APPLICANT
+  ENROLLED
+  WITHDRAWN
+  GRADUATED
+  TRANSFERRED
+}
+
+enum Phase {
+  EARLY_YEARS
+  PRIMARY
+  SECONDARY
+  POST_16
+}
+
+enum DocumentType {
+  EMIRATES_ID
+  PASSPORT
+  VISA
+  BIRTH_CERTIFICATE
+  TRANSFER_CERTIFICATE
+  PREVIOUS_REPORT
+  IMMUNISATION_RECORD
+  MEDICAL_REPORT
+  PHOTO
+  OTHER
+}
+
+enum DocumentStatus {
+  MISSING
+  RECEIVED
+  VERIFIED
+  EXPIRED
+}
+
+enum TeacherLicenceStatus {
+  NOT_REQUIRED
+  PENDING
+  PROVISIONAL
+  LICENSED
+  EXPIRED
+}
+
+enum SubjectApplicability {
+  ALL
+  MUSLIM_ONLY
+  ARABIC_NATIVE
+  ARABIC_NON_NATIVE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+  MEDICAL
+}
+
+enum AssessmentType {
+  FORMATIVE
+  SUMMATIVE
+  EXTERNAL_BENCHMARK
+  MOCK_EXAM
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  CHEQUE
+  ONLINE
+}
+
+enum FeeItemType {
+  TUITION
+  REGISTRATION_DEPOSIT
+  TRANSPORT
+  UNIFORM
+  BOOKS
+  ACTIVITIES
+  OTHER
+}
+
+enum IncidentType {
+  SAFEGUARDING
+  BEHAVIOUR
+  BULLYING
+  MEDICAL
+  WELLBEING
+  OTHER
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum DsibRating {
+  OUTSTANDING
+  VERY_GOOD
+  GOOD
+  ACCEPTABLE
+  WEAK
+  VERY_WEAK
+}
+
+enum IepStatus {
+  DRAFT
+  ACTIVE
+  UNDER_REVIEW
+  CLOSED
+}
+
+enum ContractStatus {
+  DRAFT
+  SENT
+  SIGNED
+}
+
+// ───────────────────────── Core ─────────────────────────
+
+model School {
+  id                String            @id @default(cuid())
+  name              String
+  nameAr            String?
+  khdaSchoolId      String? // KHDA school permit / registration number
+  curriculum        Curriculum        @default(UK)
+  academicYearStart AcademicYearStart @default(SEPTEMBER)
+  address           String?
+  phone             String?
+  email             String?
+  principalName     String?
+  feeFrameworkRef   String? // KHDA fee approval reference
+  lastDsibRating    DsibRating?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model AcademicYear {
+  id              String                 @id @default(cuid())
+  name            String                 @unique // e.g. "2026-2027"
+  startDate       DateTime
+  endDate         DateTime
+  isCurrent       Boolean                @default(false)
+  terms           Term[]
+  sections        Section[]
+  feeStructures   FeeStructure[]
+  contracts       ParentSchoolContract[]
+  selfEvaluations SelfEvaluation[]
+  createdAt       DateTime               @default(now())
+}
+
+model Term {
+  id             String       @id @default(cuid())
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  academicYearId String
+  number         Int // 1..3
+  name           String
+  startDate      DateTime
+  endDate        DateTime
+  feeSharePct    Int          @default(34) // share of annual tuition invoiced in this term (KHDA: fees in three instalments)
+  assessments    Assessment[]
+  invoices       Invoice[]
+
+  @@unique([academicYearId, number])
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  name         String
+  role         Role
+  locale       String     @default("en")
+  active       Boolean    @default(true)
+  staff        Staff?
+  guardian     Guardian?
+  student      Student?
+  auditLogs    AuditLog[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+// ───────────────────────── People ─────────────────────────
+
+model Staff {
+  id                    String               @id @default(cuid())
+  user                  User?                @relation(fields: [userId], references: [id])
+  userId                String?              @unique
+  staffNo               String               @unique
+  firstName             String
+  lastName              String
+  nameAr                String?
+  gender                Gender
+  dateOfBirth           DateTime?
+  nationality           String
+  emiratesId            String? // KHDA
+  emiratesIdExpiry      DateTime?
+  passportNo            String?
+  passportExpiry        DateTime?
+  visaExpiry            DateTime?
+  position              String // e.g. Teacher, Head of Department, Inclusion Champion
+  isTeaching            Boolean              @default(true)
+  highestQualification  String? // KHDA: teachers need a relevant bachelor's degree
+  teachingQualification String?
+  khdaApprovalRef       String? // KHDA teacher approval reference
+  licenceStatus         TeacherLicenceStatus @default(PENDING) // UAE Teacher Licensing System
+  licenceNo             String?
+  licenceExpiry         DateTime?
+  joinDate              DateTime
+  leaveDate             DateTime?
+  phone                 String?
+  homeroomSections      Section[]
+  assignments           TeachingAssignment[]
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+}
+
+model Guardian {
+  id              String                 @id @default(cuid())
+  user            User?                  @relation(fields: [userId], references: [id])
+  userId          String?                @unique
+  firstName       String
+  lastName        String
+  relationship    String // Father, Mother, Legal Guardian
+  nationality     String?
+  emiratesId      String?
+  passportNo      String?
+  phone           String
+  email           String?
+  address         String?
+  employer        String?
+  students        StudentGuardian[]
+  signedContracts ParentSchoolContract[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+}
+
+model Grade {
+  id                     String                  @id @default(cuid())
+  name                   String                  @unique // FS1, Year 1, Grade 1, KG1 …
+  order                  Int
+  phase                  Phase
+  minAgeYears            Int // KHDA age placement: minimum age on the cut-off date
+  sections               Section[]
+  students               Student[]
+  feeStructures          FeeStructure[]
+  curriculumRequirements CurriculumRequirement[]
+}
+
+model Section {
+  id                String               @id @default(cuid())
+  grade             Grade                @relation(fields: [gradeId], references: [id])
+  gradeId           String
+  academicYear      AcademicYear         @relation(fields: [academicYearId], references: [id])
+  academicYearId    String
+  name              String // "A", "B" …
+  capacity          Int                  @default(25)
+  homeroomTeacher   Staff?               @relation(fields: [homeroomTeacherId], references: [id])
+  homeroomTeacherId String?
+  students          Student[]
+  assignments       TeachingAssignment[]
+  assessments       Assessment[]
+
+  @@unique([gradeId, academicYearId, name])
+}
+
+model Student {
+  id                       String                 @id @default(cuid())
+  user                     User?                  @relation(fields: [userId], references: [id])
+  userId                   String?                @unique
+  studentNo                String                 @unique
+  firstName                String
+  lastName                 String
+  nameAr                   String?
+  gender                   Gender
+  dateOfBirth              DateTime
+  nationality              String // KHDA
+  isEmirati                Boolean                @default(false) // KHDA: Emirati students reported separately
+  emiratesId               String? // KHDA
+  emiratesIdExpiry         DateTime?
+  passportNo               String?
+  passportExpiry           DateTime?
+  visaNo                   String?
+  visaExpiry               DateTime?
+  isMuslim                 Boolean                @default(false) // KHDA: Islamic Education is compulsory for Muslim students
+  arabicFirstLanguage      Boolean                @default(false) // KHDA: Arabic A (native) vs Arabic B (additional language)
+  isStudentOfDetermination Boolean                @default(false) // KHDA inclusion policy (SEND)
+  sendCategory             String?
+  isGifted                 Boolean                @default(false) // gifted and talented register
+  isEAL                    Boolean                @default(false) // English as an additional language
+  previousSchool           String?
+  previousSchoolCountry    String?
+  admissionDate            DateTime
+  status                   StudentStatus          @default(APPLICANT)
+  withdrawalDate           DateTime?
+  withdrawalReason         String?
+  grade                    Grade                  @relation(fields: [gradeId], references: [id])
+  gradeId                  String
+  section                  Section?               @relation(fields: [sectionId], references: [id])
+  sectionId                String?
+  bloodGroup               String?
+  medicalNotes             String?
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  usesSchoolTransport      Boolean                @default(false)
+  guardians                StudentGuardian[]
+  documents                StudentDocument[]
+  attendance               Attendance[]
+  results                  AssessmentResult[]
+  invoices                 Invoice[]
+  ieps                     Iep[]
+  incidents                Incident[]
+  contracts                ParentSchoolContract[]
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+
+  @@index([status])
+  @@index([gradeId, sectionId])
+}
+
+model StudentGuardian {
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId  String
+  guardian   Guardian @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  guardianId String
+  isPrimary  Boolean  @default(false)
+
+  @@id([studentId, guardianId])
+}
+
+model StudentDocument {
+  id         String         @id @default(cuid())
+  student    Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId  String
+  type       DocumentType
+  status     DocumentStatus @default(MISSING)
+  reference  String?
+  expiryDate DateTime?
+  fileUrl    String?
+  notes      String?
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([studentId, type])
+}
+
+// ───────────────────────── Academics ─────────────────────────
+
+model Subject {
+  id              String                  @id @default(cuid())
+  code            String                  @unique
+  name            String
+  nameAr          String?
+  isKhdaMandatory Boolean                 @default(false) // Arabic, Islamic Education, UAE Social Studies, Moral Education
+  applicability   SubjectApplicability    @default(ALL)
+  assignments     TeachingAssignment[]
+  assessments     Assessment[]
+  requirements    CurriculumRequirement[]
+}
+
+// Minimum weekly periods a mandatory subject must be timetabled for a grade.
+model CurriculumRequirement {
+  id               String  @id @default(cuid())
+  subject          Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subjectId        String
+  grade            Grade   @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  gradeId          String
+  minWeeklyPeriods Int
+
+  @@unique([subjectId, gradeId])
+}
+
+model TeachingAssignment {
+  id            String          @id @default(cuid())
+  section       Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  sectionId     String
+  subject       Subject         @relation(fields: [subjectId], references: [id])
+  subjectId     String
+  teacher       Staff           @relation(fields: [teacherId], references: [id])
+  teacherId     String
+  weeklyPeriods Int             @default(0)
+  slots         TimetableSlot[]
+
+  @@unique([sectionId, subjectId])
+}
+
+model TimetableSlot {
+  id           String             @id @default(cuid())
+  assignment   TeachingAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignmentId String
+  dayOfWeek    Int // 1 = Monday … 5 = Friday (UAE working week)
+  period       Int
+  room         String?
+
+  @@unique([assignmentId, dayOfWeek, period])
+}
+
+model Attendance {
+  id         String           @id @default(cuid())
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId  String
+  date       DateTime         @db.Date
+  status     AttendanceStatus
+  remarks    String?
+  recordedBy String?
+  createdAt  DateTime         @default(now())
+
+  @@unique([studentId, date])
+  @@index([date])
+}
+
+model Assessment {
+  id        String             @id @default(cuid())
+  name      String
+  type      AssessmentType
+  section   Section            @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  sectionId String
+  subject   Subject            @relation(fields: [subjectId], references: [id])
+  subjectId String
+  term      Term               @relation(fields: [termId], references: [id])
+  termId    String
+  maxMarks  Int                @default(100)
+  date      DateTime
+  results   AssessmentResult[]
+  createdAt DateTime           @default(now())
+}
+
+model AssessmentResult {
+  id           String     @id @default(cuid())
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessmentId String
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId    String
+  marks        Decimal    @db.Decimal(6, 2)
+  gradeLabel   String?
+  comment      String?
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([assessmentId, studentId])
+}
+
+// ───────────────────────── Fees ─────────────────────────
+
+model FeeStructure {
+  id                  String       @id @default(cuid())
+  academicYear        AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  academicYearId      String
+  grade               Grade        @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  gradeId             String
+  annualTuition       Decimal      @db.Decimal(12, 2) // KHDA-approved tuition fee (AED)
+  khdaApprovalRef     String?
+  registrationDeposit Decimal      @db.Decimal(12, 2) // must not exceed 10% of annual tuition (KHDA)
+  transportFee        Decimal?     @db.Decimal(12, 2)
+  booksFee            Decimal?     @db.Decimal(12, 2)
+  uniformFee          Decimal?     @db.Decimal(12, 2)
+
+  @@unique([academicYearId, gradeId])
+}
+
+model Invoice {
+  id        String        @id @default(cuid())
+  invoiceNo String        @unique
+  student   Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId String
+  term      Term?         @relation(fields: [termId], references: [id])
+  termId    String?
+  issueDate DateTime      @default(now())
+  dueDate   DateTime
+  status    InvoiceStatus @default(ISSUED)
+  notes     String?
+  items     InvoiceItem[]
+  payments  Payment[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model InvoiceItem {
+  id          String      @id @default(cuid())
+  invoice     Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   String
+  type        FeeItemType
+  description String
+  amount      Decimal     @db.Decimal(12, 2)
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  invoice    Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId  String
+  amount     Decimal       @db.Decimal(12, 2)
+  method     PaymentMethod
+  reference  String?
+  paidAt     DateTime      @default(now())
+  receivedBy String?
+}
+
+// ───────────────────────── Compliance & wellbeing ─────────────────────────
+
+// KHDA Parent–School Contract: generated per student per academic year.
+model ParentSchoolContract {
+  id             String         @id @default(cuid())
+  student        Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId      String
+  academicYear   AcademicYear   @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  academicYearId String
+  status         ContractStatus @default(DRAFT)
+  tuitionFee     Decimal        @db.Decimal(12, 2)
+  content        String // rendered contract text (snapshot)
+  signedBy       Guardian?      @relation(fields: [signedById], references: [id])
+  signedById     String?
+  signedAt       DateTime?
+  createdAt      DateTime       @default(now())
+
+  @@unique([studentId, academicYearId])
+}
+
+// Individual Education Plan for students of determination (Dubai Inclusive Education Policy Framework).
+model Iep {
+  id          String    @id @default(cuid())
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId   String
+  status      IepStatus @default(DRAFT)
+  needs       String
+  targets     String
+  provisions  String
+  reviewDate  DateTime
+  coordinator String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Incident {
+  id          String       @id @default(cuid())
+  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId   String
+  type        IncidentType
+  severity    Severity     @default(LOW)
+  occurredAt  DateTime
+  description String
+  actionTaken String?
+  reportedBy  String?
+  resolved    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+}
+
+// DSIB / UAE School Inspection Framework self-evaluation (six performance standards).
+model SelfEvaluation {
+  id             String       @id @default(cuid())
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  academicYearId String
+  standard       Int // 1..6
+  indicator      String
+  rating         DsibRating
+  evidence       String?
+  actions        String?
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([academicYearId, standard, indicator])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}
