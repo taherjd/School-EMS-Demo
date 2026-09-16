@@ -42,9 +42,11 @@ export async function generateTermInvoices(_p: ActionState, fd: FormData): Promi
     const students = await prisma.student.findMany({ where: { status: "ENROLLED", invoices: { none: { termId } } }, include: { grade: true } });
     const structures = await prisma.feeStructure.findMany({ where: { academicYearId: term.academicYearId } });
     const count = await prisma.invoice.count();
+    const structureByGrade = Object.fromEntries(structures.map((f) => [f.gradeId, f]));
+    const creates = [];
     let created = 0, skipped = 0;
     for (const s of students) {
-      const fs = structures.find((f) => f.gradeId === s.gradeId);
+      const fs = structureByGrade[s.gradeId];
       if (!fs) { skipped++; continue; }
       const annual = num(fs.annualTuition);
       const tuition = Math.round((annual * term.feeSharePct) / 100);
@@ -53,11 +55,15 @@ export async function generateTermInvoices(_p: ActionState, fd: FormData): Promi
       ];
       if (term.number === 1) items.push({ type: "REGISTRATION_DEPOSIT", description: "Less: registration / re-registration deposit", amount: -num(fs.registrationDeposit) });
       if (s.usesSchoolTransport && fs.transportFee) items.push({ type: "TRANSPORT", description: `${term.name} transport`, amount: Math.round((num(fs.transportFee) * term.feeSharePct) / 100) });
-      await prisma.invoice.create({
-        data: { invoiceNo: `INV-${new Date().getFullYear()}-${String(count + created + 1).padStart(5, "0")}`, studentId: s.id, termId, dueDate, status: "ISSUED", items: { create: items } },
-      });
+      creates.push(
+        prisma.invoice.create({
+          data: { invoiceNo: `INV-${new Date().getFullYear()}-${String(count + created + 1).padStart(5, "0")}`, studentId: s.id, termId, dueDate, status: "ISSUED", items: { create: items } },
+        }),
+      );
       created++;
     }
+    // All-or-nothing: either every student gets a term invoice or none do
+    await prisma.$transaction(creates);
     await audit(session.userId, "GENERATE_INVOICES", "Term", termId, { created, skipped });
     revalidatePath("/fees");
     return { success: `Created ${created} invoice(s)${skipped ? `, skipped ${skipped} student(s) without a fee structure` : ""}.` };

@@ -31,19 +31,24 @@ export async function saveResults(_p: ActionState, fd: FormData): Promise<Action
     const assessmentId = str(fd, "assessmentId");
     const assessment = await prisma.assessment.findUnique({ where: { id: assessmentId }, include: { section: { include: { students: { where: { status: "ENROLLED" }, select: { id: true } } } } } });
     if (!assessment) return { error: "Assessment not found" };
-    let n = 0;
+    // Validate everything first, then write all results in one transaction
+    const writes = [];
     for (const s of assessment.section.students) {
       const marks = numOrNull(fd, `marks-${s.id}`);
       if (marks === null) continue;
       if (marks < 0 || marks > assessment.maxMarks) return { error: `Marks must be between 0 and ${assessment.maxMarks}.` };
-      const pct = (marks / assessment.maxMarks) * 100;
-      await prisma.assessmentResult.upsert({
-        where: { assessmentId_studentId: { assessmentId, studentId: s.id } },
-        update: { marks, gradeLabel: gradeFor(pct), comment: opt(fd, `comment-${s.id}`) },
-        create: { assessmentId, studentId: s.id, marks, gradeLabel: gradeFor(pct), comment: opt(fd, `comment-${s.id}`) },
-      });
-      n++;
+      const gradeLabel = gradeFor((marks / assessment.maxMarks) * 100);
+      const comment = opt(fd, `comment-${s.id}`);
+      writes.push(
+        prisma.assessmentResult.upsert({
+          where: { assessmentId_studentId: { assessmentId, studentId: s.id } },
+          update: { marks, gradeLabel, comment },
+          create: { assessmentId, studentId: s.id, marks, gradeLabel, comment },
+        }),
+      );
     }
+    await prisma.$transaction(writes);
+    const n = writes.length;
     await audit(session.userId, "SAVE_RESULTS", "Assessment", assessmentId, { count: n });
     revalidatePath(`/assessments/${assessmentId}`);
     return { success: `Saved ${n} result(s).` };
