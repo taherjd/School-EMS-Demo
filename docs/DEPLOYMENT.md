@@ -40,7 +40,23 @@ Caddy obtains a TLS certificate automatically for `DOMAIN` (ports 80/443 must be
 - Repository variables: `DEPLOY_HOST`, `DEPLOY_USER`
 - Repository secret: `DEPLOY_SSH_KEY` (private key for the deploy user)
 
-## Option B — managed platform
+## Option B — Firebase App Hosting (Cloud Run) + Cloud SQL
+
+App Hosting builds the Next.js app from the GitHub branch and runs it on Cloud Run; the database is a Cloud SQL for PostgreSQL instance (created via the Firebase SQL / Data Connect flow or directly in Google Cloud).
+
+1. Create the Cloud SQL PostgreSQL instance and a database; enable the Cloud SQL Admin API and allow the App Hosting service account the `Cloud SQL Client` role.
+2. Store the connection string and the session secret as App Hosting secrets:
+   ```bash
+   firebase apphosting:secrets:set DATABASE_URL   # postgresql://user:pass@/db?host=/cloudsql/PROJECT:REGION:INSTANCE  or a public-IP URL with sslmode=require
+   firebase apphosting:secrets:set AUTH_SECRET    # openssl rand -hex 32
+   ```
+3. Copy `apphosting.example.yaml` to `apphosting.yaml`, set `APP_URL` to the backend URL, and commit it. The `build:apphosting` script runs `prisma migrate deploy` during the build so schema changes ship with each rollout (the `DATABASE_URL` secret is exposed at build time for that reason).
+4. Seed demo data once, from a machine that can reach the database: `DATABASE_URL=... npx prisma db seed`. Then change every demo password in Settings, or disable the `@school.test` users.
+5. Health check: `https://<backend>--<project>.<region>.hosted.app/api/health` should return `{"status":"ok","db":"up"}`.
+
+Notes: App Hosting regions are outside the UAE (for example `europe-west4`); Cloud SQL can be placed in `me-central1` (Doha) or `me-central2` (Dammam) but Google Cloud currently has no UAE region, so confirm data-residency expectations with the school and KHDA before storing real student records there. Cloud SQL trial credits end after the trial period and standard billing applies.
+
+## Option C — other managed platforms
 
 Any platform that runs a Docker image works (AWS App Runner / ECS, Azure Container Apps, Render, Railway, Fly.io). Point `DATABASE_URL` at a managed PostgreSQL (AWS RDS in `me-central-1`, Azure Database for PostgreSQL in UAE North). Set the health check path to `/api/health`.
 

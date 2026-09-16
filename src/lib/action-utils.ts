@@ -29,6 +29,23 @@ export function numOrNull(fd: FormData, key: string): number | null {
   return isNaN(n) ? null : n;
 }
 
+/** True for the errors Next.js throws on purpose for redirect(), notFound(), forbidden() and unauthorized(). */
+export function isNextControlFlowError(e: unknown) {
+  if (typeof e !== "object" || e === null || !("digest" in e)) return false;
+  const digest = String((e as { digest?: string }).digest);
+  return digest.startsWith("NEXT_REDIRECT") || digest.startsWith("NEXT_HTTP_ERROR_FALLBACK");
+}
+
 export function isRedirectError(e: unknown) {
-  return typeof e === "object" && e !== null && "digest" in e && String((e as { digest?: string }).digest).startsWith("NEXT_REDIRECT");
+  return isNextControlFlowError(e) && String((e as { digest?: string }).digest).startsWith("NEXT_REDIRECT");
+}
+
+/**
+ * Standard catch handler for server actions: lets Next.js control-flow errors propagate,
+ * logs anything else server-side and returns a safe message for the form.
+ */
+export function handleActionError(e: unknown): ActionState {
+  if (isNextControlFlowError(e)) throw e;
+  console.error("Server action failed", e);
+  return { error: "Something went wrong while saving. Please try again or contact the system administrator." };
 }

@@ -65,6 +65,29 @@ export function statusTone(status: string): string {
   return map[status] ?? "gray";
 }
 
+/** Only relative app paths and http(s)/mailto URLs are rendered into href attributes. */
+export function safeHref(href: string): string {
+  if (href.startsWith("/") && !href.startsWith("//")) return href;
+  try {
+    const { protocol } = new URL(href);
+    return ["http:", "https:", "mailto:"].includes(protocol) ? href : "#";
+  } catch {
+    return "#";
+  }
+}
+
+const SEVERITY_TONE: Record<string, string> = { HIGH: "red", MEDIUM: "amber", LOW: "gray" };
+export function severityTone(severity: string): string {
+  return SEVERITY_TONE[severity] ?? "gray";
+}
+
+/** Stat tone for an attendance percentage against the DSIB bands. */
+export function attendanceTone(pct: number): "good" | "default" | "warn" {
+  if (pct >= 96) return "good";
+  if (pct >= 94) return "default";
+  return "warn";
+}
+
 export function label(v: string) {
   return v.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 }
@@ -85,7 +108,7 @@ export function Button({ children, variant = "primary", type = "submit", classNa
 
 export function LinkButton({ href, children, variant = "primary" }: { href: string; children: ReactNode; variant?: keyof typeof btn }) {
   return (
-    <Link href={href} className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium shadow-sm transition ${btn[variant]}`}>
+    <Link href={safeHref(href)} className={`inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium shadow-sm transition ${btn[variant]}`}>
       {children}
     </Link>
   );
@@ -114,7 +137,7 @@ export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
 }
 
 export function Table({ head, children, empty }: { head: string[]; children: ReactNode; empty?: string }) {
-  const hasRows = Array.isArray(children) ? children.length > 0 : !!children;
+  const hasRows = Array.isArray(children) ? children.length > 0 : Boolean(children);
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-gray-200 text-sm">

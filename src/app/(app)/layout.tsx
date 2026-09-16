@@ -1,6 +1,7 @@
 import { requireSession } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { SideNav, type NavItem } from "@/components/nav";
+import { safeHref } from "@/components/ui";
 import { logoutAction } from "@/app/login/actions";
 import { toggleLocale } from "./actions";
 import type { Role } from "@/generated/prisma/client";
@@ -45,7 +46,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </header>
         <nav className="flex gap-1 overflow-x-auto border-b border-gray-200 bg-white px-2 py-1 md:hidden">
           {items.map((i) => (
-            <a key={i.href} href={i.href} className="whitespace-nowrap rounded px-2 py-1 text-xs text-gray-700">{i.label}</a>
+            <a key={i.href} href={safeHref(i.href)} className="whitespace-nowrap rounded px-2 py-1 text-xs text-gray-700">{i.label}</a>
           ))}
         </nav>
         <main className="flex-1 p-4 md:p-6">{children}</main>

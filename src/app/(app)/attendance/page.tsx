@@ -3,7 +3,7 @@ import { requireRole } from "@/lib/auth";
 import { fmtDate, todayDubai, toISODate, daysAgo } from "@/lib/format";
 import { attendanceBand, DSIB_RATING_LABEL } from "@/lib/khda";
 import { ActionForm } from "@/components/action-form";
-import { Alert, Badge, Button, Card, Input, PageHeader, Select, Stat, Table, Td, label, statusTone } from "@/components/ui";
+import { Alert, Badge, Button, Card, Input, PageHeader, Select, Stat, Table, Td, attendanceTone, label, statusTone } from "@/components/ui";
 import { saveRegister } from "./actions";
 
 const STATUSES = ["PRESENT", "ABSENT", "LATE", "EXCUSED", "MEDICAL"] as const;
@@ -27,17 +27,25 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   const day = new Date(`${dateStr}T00:00:00.000Z`);
   const students = sectionId ? await prisma.student.findMany({ where: { sectionId, status: "ENROLLED" }, orderBy: { lastName: "asc" }, include: { attendance: { where: { date: day } } } }) : [];
 
-  // 30-day summary per section
+  // 30-day summary per section: one grouped query instead of one query per section
   const since = daysAgo(30);
-  const summary = await Promise.all(
-    sections.map(async (s) => {
-      const rows = await prisma.attendance.groupBy({ by: ["status"], where: { date: { gte: since }, student: { sectionId: s.id } }, _count: { _all: true } });
-      const total = rows.reduce((a, r) => a + r._count._all, 0);
-      const present = rows.filter((r) => r.status === "PRESENT" || r.status === "LATE").reduce((a, r) => a + r._count._all, 0);
-      const pct = total ? +((present / total) * 100).toFixed(1) : null;
-      return { section: s, pct, total };
-    }),
-  );
+  const bySection = await prisma.$queryRaw<{ sectionId: string; status: string; count: bigint }[]>`
+    SELECT s."sectionId", a."status", COUNT(*)::bigint AS count
+    FROM "Attendance" a JOIN "Student" s ON s."id" = a."studentId"
+    WHERE a."date" >= ${since} AND s."sectionId" IS NOT NULL
+    GROUP BY s."sectionId", a."status"`;
+  const totals = new Map<string, { total: number; present: number }>();
+  for (const r of bySection) {
+    const t = totals.get(r.sectionId) ?? { total: 0, present: 0 };
+    t.total += Number(r.count);
+    if (r.status === "PRESENT" || r.status === "LATE") t.present += Number(r.count);
+    totals.set(r.sectionId, t);
+  }
+  const summary = sections.map((s) => {
+    const t = totals.get(s.id);
+    const pct = t && t.total ? +((t.present / t.total) * 100).toFixed(1) : null;
+    return { section: s, pct, total: t?.total ?? 0 };
+  });
   const overall = summary.reduce((a, s) => ({ p: a.p + (s.pct ?? 0) * s.total, t: a.t + s.total }), { p: 0, t: 0 });
   const overallPct = overall.t ? +(overall.p / overall.t).toFixed(1) : 0;
 
@@ -49,7 +57,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
     <>
       <PageHeader title="Attendance" subtitle="Daily registers · KHDA expects accurate attendance records and follow-up on persistent absence" />
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Stat label="30-day attendance" value={`${overallPct}%`} hint={`DSIB band: ${DSIB_RATING_LABEL[attendanceBand(overallPct)]}`} tone={overallPct >= 96 ? "good" : overallPct >= 94 ? "default" : "warn"} />
+        <Stat label="30-day attendance" value={`${overallPct}%`} hint={`DSIB band: ${DSIB_RATING_LABEL[attendanceBand(overallPct)]}`} tone={attendanceTone(overallPct)} />
         <Stat label="Sections" value={sections.length} />
         <Stat label="Students with 2+ absences (30d)" value={absenteeStudents.length} tone={absenteeStudents.length ? "warn" : "good"} />
         <Stat label="Register date" value={fmtDate(day)} />

@@ -41,7 +41,8 @@ export function StaffForm({ action, staff }: { action: (p: ActionState, fd: Form
           </Field>
           <Field label="Licence number"><Input name="licenceNo" defaultValue={s?.licenceNo ?? ""} /></Field>
           <Field label="Licence expiry"><Input type="date" name="licenceExpiry" defaultValue={iso(s?.licenceExpiry)} /></Field>
-          {!s && <Field label="Login email (optional)" hint="Creates a system login with a temporary password."><Input type="email" name="email" /></Field>}
+          {!s && <Field label="Login email (optional)" hint="Creates a system login for this staff member."><Input type="email" name="email" /></Field>}
+          {!s && <Field label="Initial login password" hint="Required when an email is given; 8+ characters."><Input type="password" name="password" autoComplete="new-password" /></Field>}
         </div>
       </Card>
       <Button>{s ? "Save changes" : "Add staff member"}</Button>

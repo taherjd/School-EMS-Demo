@@ -94,6 +94,7 @@ export function StudentForm({ action, grades, sections, student, cutoffLabel }: 
             <Field label="Emirates ID"><Input name="gEmiratesId" /></Field>
             <Field label="Nationality"><Input name="gNationality" /></Field>
             <label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" name="gCreatePortal" /> Create parent portal login (email required)</label>
+            <Field label="Initial portal password" hint="8+ characters; share it with the parent securely. They can change it later."><Input name="gPortalPassword" type="password" autoComplete="new-password" /></Field>
           </div>
         </Card>
       )}

@@ -1,0 +1,26 @@
+# Firebase App Hosting configuration (copy to apphosting.yaml).
+# Secrets are created with: firebase apphosting:secrets:set DATABASE_URL  (and AUTH_SECRET)
+# DATABASE_URL must be available at BUILD time so `prisma migrate deploy` can run during the build.
+runConfig:
+  minInstances: 0
+  maxInstances: 4
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 1024
+
+scripts:
+  buildCommand: npm run build:apphosting
+
+env:
+  - variable: DATABASE_URL
+    secret: DATABASE_URL
+    availability: [BUILD, RUNTIME]
+  - variable: AUTH_SECRET
+    secret: AUTH_SECRET
+    availability: [RUNTIME]
+  - variable: APP_URL
+    value: https://YOUR-BACKEND--YOUR-PROJECT.REGION.hosted.app
+    availability: [RUNTIME]
+  - variable: NEXT_TELEMETRY_DISABLED
+    value: "1"
+    availability: [BUILD, RUNTIME]

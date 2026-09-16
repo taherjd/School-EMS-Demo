@@ -8,6 +8,13 @@ import { Badge, Button, Card, Input, PageHeader, Select, Table, Td } from "@/com
 import { removeAssignment, removeSlot, saveAssignment, saveSlot } from "../../actions";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+function MinimumBadge({ required, actual, needed }: { required: number | null; actual: number; needed: boolean }) {
+  if (required === null) return <>—</>;
+  if (!needed) return <span className="text-gray-400">n/a</span>;
+  if (actual >= required) return <Badge tone="green">≥ {required}</Badge>;
+  return <Badge tone="red">below {required}</Badge>;
+}
 const PERIODS = [1, 2, 3, 4, 5, 6, 7];
 
 export default async function SectionPage({ params }: { params: Promise<{ id: string }> }) {
@@ -37,13 +44,13 @@ export default async function SectionPage({ params }: { params: Promise<{ id: st
             <Table head={["Subject", "Teacher", "Periods / week", "KHDA minimum", ""]}>
               {section.assignments.map((a) => {
                 const req = section.grade.curriculumRequirements.find((r) => r.subjectId === a.subjectId);
-                const needed = req && section.students.some((st) => subjectAppliesToStudent(req.subject.applicability, st));
+                const needed = Boolean(req && section.students.some((st) => subjectAppliesToStudent(req.subject.applicability, st)));
                 return (
                   <tr key={a.id}>
                     <Td>{a.subject.name}</Td>
                     <Td>{a.teacher.firstName} {a.teacher.lastName} <Badge tone={a.teacher.licenceStatus === "LICENSED" ? "green" : "amber"}>{a.teacher.licenceStatus.toLowerCase()}</Badge></Td>
                     <Td>{a.weeklyPeriods} <span className="text-xs text-gray-500">({a.slots.length} timetabled)</span></Td>
-                    <Td>{req ? (needed ? (a.weeklyPeriods >= req.minWeeklyPeriods ? <Badge tone="green">≥ {req.minWeeklyPeriods}</Badge> : <Badge tone="red">below {req.minWeeklyPeriods}</Badge>) : <span className="text-gray-400">n/a</span>) : "—"}</Td>
+                    <Td><MinimumBadge required={req?.minWeeklyPeriods ?? null} actual={a.weeklyPeriods} needed={needed} /></Td>
                     <Td>{canEdit && <form action={removeAssignment}><input type="hidden" name="id" value={a.id} /><input type="hidden" name="sectionId" value={id} /><button className="text-xs text-red-600 hover:underline">remove</button></form>}</Td>
                   </tr>
                 );

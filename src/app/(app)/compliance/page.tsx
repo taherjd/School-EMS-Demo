@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth";
 import { collectFindings, contractCompliance, curriculumCompliance, currentYear, expiringDocuments, inclusionCompliance, missingDocuments } from "@/lib/compliance";
 import { fmtDate } from "@/lib/format";
 import { DSIB_RATING_LABEL, DSIB_STANDARDS } from "@/lib/khda";
-import { Badge, Card, LinkButton, PageHeader, Stat, Table, Td, label, statusTone } from "@/components/ui";
+import { Badge, Card, LinkButton, PageHeader, Stat, Table, Td, label, safeHref, severityTone, statusTone } from "@/components/ui";
 
 export default async function CompliancePage() {
   await requireRole("ADMIN", "REGISTRAR", "ACCOUNTANT");
@@ -20,6 +20,9 @@ export default async function CompliancePage() {
   const incl = await inclusionCompliance();
   const contracts = year ? await contractCompliance(year.id) : { enrolled: 0, signed: 0, unsigned: 0 };
   const high = findings.filter((f) => f.severity === "HIGH").length;
+  let findingsTone: "bad" | "warn" | "good" = "good";
+  if (high > 0) findingsTone = "bad";
+  else if (findings.length > 0) findingsTone = "warn";
   const sefByStandard = DSIB_STANDARDS.map((s) => {
     const rows = sef.filter((r) => r.standard === s.number);
     const order = ["OUTSTANDING", "VERY_GOOD", "GOOD", "ACCEPTABLE", "WEAK", "VERY_WEAK"];
@@ -31,7 +34,7 @@ export default async function CompliancePage() {
     <>
       <PageHeader title="KHDA compliance" subtitle={`Readiness checks for KHDA registration, DSIB inspection and the fee framework · ${year?.name ?? ""}`} actions={<><LinkButton href="/compliance/sef" variant="secondary">DSIB self-evaluation</LinkButton><LinkButton href="/api/export/students" variant="secondary">Export student data (CSV)</LinkButton></>} />
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Stat label="Open findings" value={findings.length} hint={`${high} high severity`} tone={high ? "bad" : findings.length ? "warn" : "good"} />
+        <Stat label="Open findings" value={findings.length} hint={`${high} high severity`} tone={findingsTone} />
         <Stat label="Students missing documents" value={missing.length} tone={missing.length ? "warn" : "good"} />
         <Stat label="Curriculum minimum breaches" value={curr.issues.length} hint={`${curr.sections} sections checked`} tone={curr.issues.length ? "bad" : "good"} />
         <Stat label="Contracts signed" value={`${contracts.signed} / ${contracts.enrolled}`} tone={contracts.unsigned ? "warn" : "good"} />
@@ -41,9 +44,9 @@ export default async function CompliancePage() {
         <Table head={["Severity", "Area", "Finding"]} empty="No open findings">
           {findings.map((f, i) => (
             <tr key={i}>
-              <Td><Badge tone={f.severity === "HIGH" ? "red" : f.severity === "MEDIUM" ? "amber" : "gray"}>{f.severity}</Badge></Td>
+              <Td><Badge tone={severityTone(f.severity)}>{f.severity}</Badge></Td>
               <Td>{f.area}</Td>
-              <Td>{f.href ? <Link href={f.href} className="hover:underline">{f.message}</Link> : f.message}</Td>
+              <Td>{f.href ? <Link href={safeHref(f.href)} className="hover:underline">{f.message}</Link> : f.message}</Td>
             </tr>
           ))}
         </Table>

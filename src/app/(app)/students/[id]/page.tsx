@@ -44,6 +44,12 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
   const requiredSubjects = subjects.filter((s) => subjectAppliesToStudent(s.applicability, student));
   const activeIep = student.ieps.find((i) => i.status === "ACTIVE" || i.status === "UNDER_REVIEW") ?? student.ieps[0];
   const contract = year ? student.contracts.find((c) => c.academicYearId === year.id) : null;
+  let ageTone: "error" | "warn" | "success" = "success";
+  if (ageCheck?.tooYoung) ageTone = "error";
+  else if (ageCheck?.needsKhdaApproval) ageTone = "warn";
+  let visaLabel = "—";
+  if (student.visaNo) visaLabel = `${student.visaNo} (exp. ${fmtDate(student.visaExpiry)})`;
+  else if (student.isEmirati) visaLabel = "Not required";
 
   return (
     <>
@@ -61,7 +67,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
 
       {ageCheck && (
         <div className="mb-4">
-          <Alert tone={ageCheck.tooYoung ? "error" : ageCheck.needsKhdaApproval ? "warn" : "success"}>KHDA age placement: {ageCheck.message}</Alert>
+          <Alert tone={ageTone}>KHDA age placement: {ageCheck.message}</Alert>
         </div>
       )}
 
@@ -73,7 +79,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             ["Nationality", <>{student.nationality} {student.isEmirati && <Badge tone="green">Emirati</Badge>}</>],
             ["Emirates ID", student.emiratesId ? `${formatEmiratesId(student.emiratesId)} (exp. ${fmtDate(student.emiratesIdExpiry)})` : "—"],
             ["Passport", student.passportNo ? `${student.passportNo} (exp. ${fmtDate(student.passportExpiry)})` : "—"],
-            ["Residence visa", student.visaNo ? `${student.visaNo} (exp. ${fmtDate(student.visaExpiry)})` : student.isEmirati ? "Not required" : "—"],
+            ["Residence visa", visaLabel],
             ["Admission date", fmtDate(student.admissionDate)],
             ["Previous school", student.previousSchool ? `${student.previousSchool}${student.previousSchoolCountry ? `, ${student.previousSchoolCountry}` : ""}` : "—"],
             ["Homeroom teacher", student.section?.homeroomTeacher ? `${student.section.homeroomTeacher.firstName} ${student.section.homeroomTeacher.lastName}` : "—"],

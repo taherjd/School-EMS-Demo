@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireRole, hashPassword } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { isValidEmiratesId, normaliseEmiratesId } from "@/lib/khda";
-import { bool, date, opt, str, zodError } from "@/lib/action-utils";
+import { bool, date, opt, str, zodError, handleActionError } from "@/lib/action-utils";
 import type { ActionState } from "@/components/action-form";
 
 const schema = z.object({
@@ -47,34 +47,39 @@ function parse(fd: FormData) {
 }
 
 export async function saveStaff(id: string | null, _prev: ActionState, fd: FormData): Promise<ActionState> {
-  const session = await requireRole("ADMIN", "REGISTRAR");
-  const parsed = parse(fd);
-  if (!parsed.success) return zodError(parsed.error);
-  const data = parsed.data;
-  if (data.emiratesId && !isValidEmiratesId(data.emiratesId)) return { error: "Emirates ID is not valid." };
-  if (data.isTeaching && data.licenceStatus === "NOT_REQUIRED") return { error: "Teaching staff require a UAE teacher licence status other than 'Not required'." };
-  const payload = { ...data, emiratesId: data.emiratesId ? normaliseEmiratesId(data.emiratesId) : null };
+  try {
+    const session = await requireRole("ADMIN", "REGISTRAR");
+    const parsed = parse(fd);
+    if (!parsed.success) return zodError(parsed.error);
+    const data = parsed.data;
+    if (data.emiratesId && !isValidEmiratesId(data.emiratesId)) return { error: "Emirates ID is not valid." };
+    if (data.isTeaching && data.licenceStatus === "NOT_REQUIRED") return { error: "Teaching staff require a UAE teacher licence status other than 'Not required'." };
+    const payload = { ...data, emiratesId: data.emiratesId ? normaliseEmiratesId(data.emiratesId) : null };
 
-  if (id) {
-    await prisma.staff.update({ where: { id }, data: payload });
-    await audit(session.userId, "UPDATE", "Staff", id);
-    revalidatePath(`/staff/${id}`);
-    redirect(`/staff/${id}`);
-  }
+    if (id) {
+      await prisma.staff.update({ where: { id }, data: payload });
+      await audit(session.userId, "UPDATE", "Staff", id);
+      revalidatePath(`/staff/${id}`);
+      redirect(`/staff/${id}`);
+    }
 
-  const email = opt(fd, "email");
-  let userId: string | null = null;
-  if (email) {
-    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    if (existing) return { error: "A user with this email already exists." };
-    const temp = `Staff-${Math.random().toString(36).slice(2, 8)}!`;
-    const u = await prisma.user.create({ data: { email: email.toLowerCase(), passwordHash: await hashPassword(temp), name: `${data.firstName} ${data.lastName}`, role: data.isTeaching ? "TEACHER" : "REGISTRAR" } });
-    userId = u.id;
-    console.info(`Staff login created for ${email} with temporary password ${temp}`);
+    const email = opt(fd, "email");
+    const initialPassword = str(fd, "password");
+    let userId: string | null = null;
+    if (email) {
+      if (initialPassword.length < 8) return { error: "Set an initial login password of at least 8 characters for the staff member." };
+      const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+      if (existing) return { error: "A user with this email already exists." };
+      const passwordHash = await hashPassword(initialPassword);
+      const u = await prisma.user.create({ data: { email: email.toLowerCase(), passwordHash, name: `${data.firstName} ${data.lastName}`, role: data.isTeaching ? "TEACHER" : "REGISTRAR" } });
+      userId = u.id;
+    }
+    const count = await prisma.staff.count();
+    const staff = await prisma.staff.create({ data: { ...payload, userId, staffNo: `STF-${String(count + 1).padStart(4, "0")}` } });
+    await audit(session.userId, "CREATE", "Staff", staff.id);
+    revalidatePath("/staff");
+    redirect(`/staff/${staff.id}`);
+  } catch (e) {
+    return handleActionError(e);
   }
-  const count = await prisma.staff.count();
-  const staff = await prisma.staff.create({ data: { ...payload, userId, staffNo: `STF-${String(count + 1).padStart(4, "0")}` } });
-  await audit(session.userId, "CREATE", "Staff", staff.id);
-  revalidatePath("/staff");
-  redirect(`/staff/${staff.id}`);
 }

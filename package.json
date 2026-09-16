@@ -14,7 +14,8 @@
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
     "test:e2e": "playwright test",
-    "test:unit": "tsx --test tests/*.test.ts"
+    "test:unit": "tsx --test tests/*.test.ts",
+    "build:apphosting": "prisma migrate deploy && prisma generate && next build"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
