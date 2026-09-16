@@ -15,7 +15,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 # DATABASE_URL is only needed for `prisma generate` type generation here, not for a live connection
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
-RUN npx prisma generate && npx next build
+RUN mkdir -p public && npx prisma generate && npx next build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
